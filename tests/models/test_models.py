@@ -98,12 +98,12 @@ def test_jax_scvi():
     model.train(2, train_size=0.5, check_val_every_n_epoch=1)
     model.get_latent_representation()
 
-    model = JaxSCVI(adata, n_latent=n_latent, gene_likelihood="poisson")
-    model.train(1, train_size=0.5)
-    z1 = model.get_latent_representation(give_mean=True, mc_samples=1)
-    assert z1.ndim == 2
-    z2 = model.get_latent_representation(give_mean=False, mc_samples=15)
-    assert (z2.ndim == 3) and (z2.shape[0] == 15)
+    # model = JaxSCVI(adata, n_latent=n_latent, gene_likelihood="poisson")
+    # model.train(1, train_size=0.5)
+    # z1 = model.get_latent_representation(give_mean=True, mc_samples=1)
+    # assert z1.ndim == 2
+    # z2 = model.get_latent_representation(give_mean=False, mc_samples=15)
+    # assert (z2.ndim == 3) and (z2.shape[0] == 15)
 
 
 def test_jax_scvi_save_load(save_path):
@@ -1554,3 +1554,6 @@ def test_early_stopping():
     model = SCVI(adata)
     model.train(n_epochs, early_stopping=True, plan_kwargs=dict(lr=0))
     assert len(model.history["elbo_train"]) < n_epochs
+
+
+test_jax_scvi()

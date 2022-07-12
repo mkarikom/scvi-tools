@@ -1,3 +1,4 @@
+import warnings
 from functools import partial
 from inspect import getfullargspec, signature
 from typing import Callable, Dict, Optional, Union
@@ -9,6 +10,7 @@ import optax
 import pyro
 import pytorch_lightning as pl
 import torch
+from memory_profiler import profile
 from pyro.nn import PyroModule
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torchmetrics import MetricCollection
@@ -940,7 +942,10 @@ class JaxTrainingPlan(pl.LightningModule):
         self.module.train_state = train_state
 
     @staticmethod
-    @jax.jit
+    @partial(
+        jax.jit,
+        donate_argnums=0,
+    )
     def jit_training_step(
         state: TrainStateWithBatchNorm,
         batch: Dict[str, np.ndarray],
@@ -966,16 +971,20 @@ class JaxTrainingPlan(pl.LightningModule):
         )
         return new_state, loss, elbo
 
+    @profile
     def training_step(self, batch, batch_idx):
         if "kl_weight" in self.loss_kwargs:
             self.loss_kwargs.update({"kl_weight": self.kl_weight})
         self.module.train()
-        self.module.train_state, loss, elbo = self.jit_training_step(
-            self.module.train_state,
-            batch,
-            self.module.rngs,
-            loss_kwargs=self.loss_kwargs,
-        )
+        with warnings.catch_warnings():
+            # Ignore UserWarning thrown by Jax when donate_argnums used on CPU.
+            warnings.simplefilter("ignore", UserWarning)
+            self.module.train_state, loss, elbo = self.jit_training_step(
+                self.module.train_state,
+                batch,
+                self.module.rngs,
+                loss_kwargs=self.loss_kwargs,
+            )
         loss = torch.tensor(jax.device_get(loss))
         elbo = torch.tensor(jax.device_get(elbo))
         # TODO: Better way to get batch size
@@ -992,7 +1001,7 @@ class JaxTrainingPlan(pl.LightningModule):
             batch_size=batch[REGISTRY_KEYS.X_KEY].shape[0],
         )
 
-    @partial(jax.jit, static_argnums=(0,))
+    @partial(jax.jit, static_argnums=0)
     def jit_validation_step(
         self,
         state: TrainStateWithBatchNorm,
